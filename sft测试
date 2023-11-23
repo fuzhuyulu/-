@@ -1,0 +1,56 @@
+
+
+import json
+from retrying import retry
+import requests
+
+@retry(stop_max_attempt_number=3, wait_fixed=3000)   # 20s一重试
+def dify_searchQA_sft(query):
+
+    payload = json.dumps({
+        "inputs": {},
+        "query": query,
+        "response_mode": "blocking",
+        "user": "abc-123"
+    })
+
+    tooluse_saerch_QA_url = "https://copilot-test.now.baidu-int.com/v1/api/completion-messages"
+    headers = {'content-type': 'application/json', "Authorization": "Bearer app-wAb8gSQ8uUa2kUUUm28WldoW"}   # eb4辅助QA对生成
+    try:
+        resp = requests.post(tooluse_saerch_QA_url, data=payload, headers=headers)
+        assert resp.status_code == 200
+        json_response = resp.json()
+    except Exception as e:
+        print('msg:', str(e), f"\n{resp.text}\n。try again:")
+        raise Exception
+    return json_response
+
+
+
+def func(in_path, out_path):
+    count = 0
+    fw = open(out_path, 'w')
+    with open(in_path, "rb") as f:
+        for line in f:
+            query = line.strip().decode("utf8")
+            try:
+                response_sft = dify_searchQA_sft(query)
+                plain_text = response_sft["trace_log"][0]['plain_text']
+            except:
+                print("sft error")
+                response_sft = {"answer": "None"}
+                plain_text = "None"
+            try:
+                answer_sft = response_sft["answer"]
+            except:
+                answer_sft = "None"
+            fw.write(query+'\t')
+            fw.write(json.dumps({"para": plain_text},ensure_ascii=False)+'\t')
+            fw.write(json.dumps({"sft_answer": answer_sft},ensure_ascii=False)+'\n')
+            count += 1
+            print("已完成 {} 个query".format(count))
+    fw.close()
+
+if __name__ == "__main__":
+    func("/Users/shiliang03/Desktop/炸鸡测试1123.txt", "/Users/shiliang03/Desktop/炸鸡1123测试结果.txt")
+    ##左边参数填query集合文件路径，文件需要保证每个query一行； 右边参数是输出结果的文件路径
